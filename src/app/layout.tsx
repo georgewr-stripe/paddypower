@@ -8,6 +8,7 @@ import { AdminPanel } from '@/components/ui/AdminPanel';
 import { LoginModal } from '@/components/ui/LoginModal';
 import { DynamicFavicon } from '@/components/ui/DynamicFavicon';
 import { MobileBetSlip } from '@/components/betting/MobileBetSlip';
+import { MainContent } from '@/components/ui/MainContent';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -26,11 +27,13 @@ export default function RootLayout({
       <body className="bg-[#1a1a2e] text-white min-h-full flex flex-col font-[family-name:var(--font-inter)]">
         <SettingsProvider>
           <BetProvider>
-            <DynamicFavicon />
-            <Header />
-            <main className="flex-1">{children}</main>
-            <LoginModal />
-            <MobileBetSlip />
+            <MainContent>
+              <DynamicFavicon />
+              <Header />
+              <main className="flex-1">{children}</main>
+              <LoginModal />
+              <MobileBetSlip />
+            </MainContent>
             <AdminPanel />
           </BetProvider>
         </SettingsProvider>

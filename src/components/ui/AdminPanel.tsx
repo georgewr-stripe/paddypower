@@ -17,7 +17,7 @@ export function AdminPanel() {
       {/* Floating Stripe Button */}
       <button
         onClick={() => setAdminOpen(true)}
-        className="fixed bottom-6 right-6 w-12 h-12 bg-[#635BFF] hover:bg-[#5851DB] rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110 z-50"
+        className="fixed bottom-6 left-6 w-12 h-12 bg-[#635BFF] hover:bg-[#5851DB] rounded-full shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-110 z-50"
         title="Admin Settings"
       >
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -29,17 +29,17 @@ export function AdminPanel() {
       </button>
 
       {/* Overlay */}
-      {adminOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-50"
-          onClick={() => setAdminOpen(false)}
-        />
-      )}
+      <div
+        className={`fixed inset-0 z-50 transition-all duration-500 ${
+          adminOpen ? 'bg-black/60 backdrop-blur-sm pointer-events-auto' : 'bg-transparent pointer-events-none'
+        }`}
+        onClick={() => setAdminOpen(false)}
+      />
 
       {/* Slide-out Panel */}
       <div
-        className={`fixed top-0 right-0 h-full w-80 bg-[#0a0a0a] border-l border-white/10 z-50 transform transition-transform duration-300 ${
-          adminOpen ? 'translate-x-0' : 'translate-x-full'
+        className={`fixed top-0 left-0 h-full w-80 bg-[#0a0a0a] border-r border-white/10 z-50 transform transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+          adminOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <div className="p-6 h-full overflow-y-auto">
@@ -58,7 +58,7 @@ export function AdminPanel() {
             </div>
             <button
               onClick={() => setAdminOpen(false)}
-              className="text-gray-400 hover:text-white text-xl"
+              className="text-gray-400 hover:text-white text-xl transition-colors"
             >
               &times;
             </button>
@@ -72,7 +72,7 @@ export function AdminPanel() {
                 <button
                   key={key}
                   onClick={() => updateCurrency(key)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded text-sm transition-colors ${
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded text-sm transition-all duration-200 ${
                     settings.currency === key
                       ? 'bg-[#635BFF] text-white'
                       : 'text-gray-300 hover:bg-white/5'

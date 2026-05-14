@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       },
     ],
     mode: 'payment',
-    return_url: `${request.headers.get('origin') || 'http://localhost:3000'}/account/deposit/complete?session_id={CHECKOUT_SESSION_ID}`,
+    return_url: `${request.headers.get('origin') || 'http://localhost:3000'}/account/deposit?session_id={CHECKOUT_SESSION_ID}`,
     saved_payment_method_options: {
       payment_method_save: 'enabled',
     },

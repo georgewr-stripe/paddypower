@@ -1,17 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { stripePromise } from '@/lib/stripe-client';
 import { useBet } from '@/lib/bet-context';
 import { useSettings } from '@/lib/settings-context';
 import { Button } from '@/components/ui/Button';
-import { Check, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Check, ArrowRight, CreditCard, Loader2 } from 'lucide-react';
 import {
   CheckoutElementsProvider,
   PaymentElement,
   ExpressCheckoutElement,
   useCheckoutElements,
 } from '@stripe/react-stripe-js/checkout';
+
+type SavedMethod = {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+};
 
 function DepositForm({ amount, currencySymbol, onSuccess }: { amount: number; currencySymbol: string; onSuccess: () => void }) {
   const checkoutState = useCheckoutElements();
@@ -60,7 +68,7 @@ function DepositForm({ amount, currencySymbol, onSuccess }: { amount: number; cu
 
       <div className="flex items-center gap-3 mb-4">
         <div className="flex-1 h-px bg-white/10" />
-        <span className="text-gray-400 text-xs">Or pay with</span>
+        <span className="text-gray-400 text-xs">Or pay with card</span>
         <div className="flex-1 h-px bg-white/10" />
       </div>
 
@@ -93,14 +101,74 @@ function DepositForm({ amount, currencySymbol, onSuccess }: { amount: number; cu
   );
 }
 
+function SavedMethodCard({
+  method,
+  selected,
+  onSelect,
+}: {
+  method: SavedMethod;
+  selected: boolean;
+  onSelect: (methodId: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSelect(method.id)}
+      className={`w-full flex items-center gap-3 rounded-lg p-4 transition-all ${
+        selected
+          ? 'bg-[#1a1a2e] border-2 border-green-500'
+          : 'bg-[#1a1a2e] border border-white/10 hover:border-white/30'
+      }`}
+    >
+      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+        selected ? 'border-green-500' : 'border-gray-500'
+      }`}>
+        {selected && <div className="w-2.5 h-2.5 rounded-full bg-green-500" />}
+      </div>
+      <div className="w-8 h-8 bg-[#2a3a5e] rounded flex items-center justify-center flex-shrink-0">
+        <CreditCard className="w-4 h-4 text-gray-300" />
+      </div>
+      <div className="flex-1 text-left">
+        <p className="text-white text-sm font-medium capitalize">
+          {method.brand} •••• {method.last4}
+        </p>
+        <p className="text-gray-400 text-xs">
+          Expires {String(method.expMonth).padStart(2, '0')}/{method.expYear}
+        </p>
+      </div>
+    </button>
+  );
+}
+
 export default function DepositPage() {
   const { balance, setBalance, user, updateUser } = useBet();
   const { currencySymbol, settings } = useSettings();
-  const [amount, setAmount] = useState(0);
+  const [amount, setAmount] = useState(20);
   const [clientSecret, setClientSecret] = useState('');
-  const [step, setStep] = useState<'amount' | 'payment' | 'success'>('amount');
+  const [showNewPayment, setShowNewPayment] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [savedMethods, setSavedMethods] = useState<SavedMethod[]>([]);
+  const [loadingMethods, setLoadingMethods] = useState(true);
+  const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
+  const [charging, setCharging] = useState(false);
+  const [error, setError] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState('');
+
+  useEffect(() => {
+    if (user?.customerId) {
+      fetch(`/api/stripe/payment-methods?customerId=${user.customerId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          setSavedMethods(data.paymentMethods);
+          if (data.paymentMethods.length > 0) {
+            setSelectedMethod(data.paymentMethods[0].id);
+          }
+        })
+        .finally(() => setLoadingMethods(false));
+    } else {
+      setLoadingMethods(false);
+    }
+  }, [user?.customerId]);
 
   const handleVerify = async () => {
     if (!user) return;
@@ -174,9 +242,7 @@ export default function DepositPage() {
           </Button>
 
           <button
-            onClick={() => {
-              updateUser({ verified: true });
-            }}
+            onClick={() => updateUser({ verified: true })}
             className="w-full mt-3 text-gray-500 text-xs hover:text-gray-300 transition-colors"
           >
             Skip for demo <ArrowRight className="w-3 h-3 inline" />
@@ -190,7 +256,39 @@ export default function DepositPage() {
     );
   }
 
-  const handleAmountSubmit = async () => {
+  const handleSavedMethodDeposit = async () => {
+    if (amount <= 0 || !selectedMethod) return;
+    setCharging(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/stripe/charge-saved-method', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: Math.round(amount * 100),
+          currency: settings.currency,
+          customerId: user?.customerId,
+          paymentMethodId: selectedMethod,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.status === 'succeeded') {
+        setBalance(balance + amount);
+        setSuccess(true);
+      } else {
+        setError('Payment failed. Please try a different method.');
+      }
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setCharging(false);
+    }
+  };
+
+  const handleNewPayment = async () => {
     if (amount <= 0) return;
 
     const res = await fetch('/api/stripe/create-checkout-session', {
@@ -206,106 +304,17 @@ export default function DepositPage() {
 
     const data = await res.json();
     setClientSecret(data.clientSecret);
-    setStep('payment');
+    setShowNewPayment(true);
   };
 
   const handleSuccess = () => {
     setBalance(balance + amount);
-    setStep('success');
+    setSuccess(true);
   };
 
-  return (
-    <div className="max-w-lg mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-white mb-6">Deposit Funds</h1>
-
-      {step === 'amount' && (
-        <div className="bg-[#0f3460] rounded-lg p-6">
-          <p className="text-gray-300 text-sm mb-4">
-            Current balance: <span className="text-white font-bold">{currencySymbol}{balance.toFixed(2)}</span>
-          </p>
-
-          <div className="grid grid-cols-4 gap-2 mb-4">
-            {[10, 20, 50, 100].map((preset) => (
-              <button
-                key={preset}
-                onClick={() => setAmount(preset)}
-                className={`py-3 rounded font-bold transition-colors ${
-                  amount === preset
-                    ? 'bg-green-600 text-white'
-                    : 'bg-[#2a3a5e] text-gray-300 hover:bg-[#3a4a6e]'
-                }`}
-              >
-                {currencySymbol}{preset}
-              </button>
-            ))}
-          </div>
-
-          <div className="relative mb-6">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">{currencySymbol}</span>
-            <input
-              type="number"
-              value={amount || ''}
-              onChange={(e) => setAmount(Number(e.target.value))}
-              placeholder="Custom amount"
-              className="w-full bg-[#1a1a2e] border border-white/10 rounded px-8 py-3 text-white text-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-          </div>
-
-          <Button
-            variant="secondary"
-            fullWidth
-            size="lg"
-            disabled={amount <= 0}
-            onClick={handleAmountSubmit}
-          >
-            Continue to Payment
-          </Button>
-
-          <div className="mt-4 flex items-center gap-2 text-xs text-gray-400">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-            </svg>
-            Secured by Stripe &bull; Radar fraud protection active
-          </div>
-        </div>
-      )}
-
-      {step === 'payment' && clientSecret && (
-        <div className="bg-[#0f3460] rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() => setStep('amount')}
-              className="text-green-400 text-sm hover:underline"
-            >
-              <ArrowLeft className="w-4 h-4 inline" /> Back
-            </button>
-            <span className="text-gray-400 text-sm">
-              Depositing: <span className="text-white font-bold">{currencySymbol}{amount.toFixed(2)}</span>
-            </span>
-          </div>
-
-          <CheckoutElementsProvider
-            stripe={stripePromise}
-            options={{
-              clientSecret,
-              elementsOptions: {
-                appearance: {
-                  theme: 'night',
-                  variables: {
-                    colorPrimary: settings.branding.primaryColor,
-                    colorBackground: '#1a1a2e',
-                    colorText: '#ffffff',
-                  },
-                },
-              },
-            }}
-          >
-            <DepositForm amount={amount} currencySymbol={currencySymbol} onSuccess={handleSuccess} />
-          </CheckoutElementsProvider>
-        </div>
-      )}
-
-      {step === 'success' && (
+  if (success) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-8">
         <div className="bg-[#0f3460] rounded-lg p-8 text-center">
           <Check className="w-12 h-12 text-green-400 mx-auto mb-4" />
           <h2 className="text-white text-xl font-bold mb-2">Deposit Successful!</h2>
@@ -323,7 +332,138 @@ export default function DepositPage() {
             Start Betting
           </Button>
         </div>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-lg mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold text-white mb-6">Deposit Funds</h1>
+
+      <div className="bg-[#0f3460] rounded-lg p-6">
+        <p className="text-gray-300 text-sm mb-4">
+          Current balance: <span className="text-white font-bold">{currencySymbol}{balance.toFixed(2)}</span>
+        </p>
+
+        {/* Amount Selection */}
+        <div className="grid grid-cols-4 gap-2 mb-4">
+          {[10, 20, 50, 100].map((preset) => (
+            <button
+              key={preset}
+              onClick={() => { setAmount(preset); setShowNewPayment(false); setClientSecret(''); }}
+              className={`py-3 rounded font-bold transition-colors ${
+                amount === preset
+                  ? 'bg-green-600 text-white'
+                  : 'bg-[#2a3a5e] text-gray-300 hover:bg-[#3a4a6e]'
+              }`}
+            >
+              {currencySymbol}{preset}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative mb-6">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">{currencySymbol}</span>
+          <input
+            type="number"
+            value={amount || ''}
+            onChange={(e) => { setAmount(Number(e.target.value)); setShowNewPayment(false); setClientSecret(''); }}
+            placeholder="Custom amount"
+            className="w-full bg-[#1a1a2e] border border-white/10 rounded px-8 py-3 text-white text-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+        </div>
+
+        {error && (
+          <p className="text-red-400 text-sm mb-4">{error}</p>
+        )}
+
+        {/* Saved Payment Methods */}
+        {loadingMethods ? (
+          <div className="text-center text-gray-400 text-sm py-4">Loading payment methods...</div>
+        ) : savedMethods.length > 0 && !showNewPayment ? (
+          <div className="mb-4">
+            <p className="text-gray-400 text-xs uppercase tracking-wide font-medium mb-3">Saved payment methods</p>
+            <div className="space-y-2">
+              {savedMethods.map((method) => (
+                <SavedMethodCard
+                  key={method.id}
+                  method={method}
+                  selected={selectedMethod === method.id}
+                  onSelect={setSelectedMethod}
+                />
+              ))}
+            </div>
+
+            <Button
+              variant="secondary"
+              fullWidth
+              size="lg"
+              disabled={amount <= 0 || !selectedMethod || charging}
+              onClick={handleSavedMethodDeposit}
+              className="mt-4"
+            >
+              {charging ? 'Processing...' : `Deposit ${currencySymbol}${amount.toFixed(2)}`}
+            </Button>
+
+            <button
+              onClick={handleNewPayment}
+              disabled={amount <= 0}
+              className="w-full mt-3 text-green-400 text-sm hover:text-green-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Pay with a new method
+            </button>
+          </div>
+        ) : !showNewPayment ? (
+          <Button
+            variant="secondary"
+            fullWidth
+            size="lg"
+            disabled={amount <= 0}
+            onClick={handleNewPayment}
+          >
+            Continue to Payment
+          </Button>
+        ) : null}
+
+        {/* New Payment Form */}
+        {showNewPayment && clientSecret && (
+          <div className="mt-4">
+            {savedMethods.length > 0 && (
+              <button
+                onClick={() => { setShowNewPayment(false); setClientSecret(''); }}
+                className="text-green-400 text-sm hover:underline mb-4 block"
+              >
+                ← Back to saved methods
+              </button>
+            )}
+            <CheckoutElementsProvider
+              stripe={stripePromise}
+              options={{
+                clientSecret,
+                elementsOptions: {
+                  appearance: {
+                    theme: 'night',
+                    variables: {
+                      colorPrimary: settings.branding.primaryColor,
+                      colorBackground: '#1a1a2e',
+                      colorText: '#ffffff',
+                    },
+                  },
+                },
+              }}
+            >
+              <DepositForm amount={amount} currencySymbol={currencySymbol} onSuccess={handleSuccess} />
+            </CheckoutElementsProvider>
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center gap-2 text-xs text-gray-400">
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+          </svg>
+          Secured by Stripe &bull; Radar fraud protection active
+        </div>
+      </div>
     </div>
   );
 }

@@ -70,6 +70,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       }
     }
     setHydrated(true);
+
+    fetch('/api/stripe/branding')
+      .then((res) => {
+        if (res.ok) return res.json();
+        return null;
+      })
+      .then((data) => {
+        if (data) {
+          setSettings((prev) => ({
+            ...prev,
+            branding: { ...prev.branding, ...data },
+            stripeBrandingLoaded: true,
+          }));
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
