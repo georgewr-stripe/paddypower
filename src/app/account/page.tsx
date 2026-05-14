@@ -4,11 +4,85 @@ import { useState, useEffect, useCallback } from 'react';
 import { useBet } from '@/lib/bet-context';
 import { useSettings } from '@/lib/settings-context';
 import { stripePromise } from '@/lib/stripe-client';
-import { mockTransactions } from '@/lib/mock-data';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
-import { Check, Landmark, CreditCard, Plus, ArrowUpRight, ArrowDownLeft, Star, Minus, ExternalLink, Info } from 'lucide-react';
+import { FaCheck, FaUniversity, FaCreditCard, FaPlus, FaArrowUp, FaArrowDown, FaStar, FaMinus, FaExternalLinkAlt, FaInfoCircle, FaTrash, FaSpinner } from 'react-icons/fa';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { PaymentMethodIcon } from '@/components/ui/PaymentMethodIcon';
+
+interface SavedPaymentMethod {
+  id: string;
+  type: string;
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+  bankName: string | null;
+  bankLast4: string | null;
+  email: string | null;
+}
+
+function AddCardForm({ customerId, onSuccess, onCancel }: { customerId: string; onSuccess: () => void; onCancel: () => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setProcessing(true);
+    setError('');
+
+    const { error: submitError } = await elements.submit();
+    if (submitError) {
+      setError(submitError.message || 'Validation failed');
+      setProcessing(false);
+      return;
+    }
+
+    const res = await fetch('/api/stripe/create-setup-intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customerId }),
+    });
+    const { clientSecret } = await res.json();
+
+    const result = await stripe.confirmSetup({
+      elements,
+      clientSecret,
+      confirmParams: {
+        return_url: `${window.location.origin}/account`,
+      },
+      redirect: 'if_required',
+    });
+
+    if (result.error) {
+      setError(result.error.message || 'Failed to save payment method');
+      setProcessing(false);
+    } else {
+      onSuccess();
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="px-6 py-4 border-t border-white/10">
+      <p className="text-white text-sm font-medium mb-3">Add a new payment method</p>
+      <PaymentElement />
+      {error && <p className="text-red-400 text-xs mt-3">{error}</p>}
+      <div className="flex gap-2 mt-4">
+        <Button type="submit" variant="secondary" size="sm" disabled={processing || !stripe}>
+          {processing ? 'Saving...' : 'Save'}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
 
 interface PayoutMethod {
   id: string;
@@ -78,10 +152,16 @@ export default function AccountPage() {
   const [verificationStatus, setVerificationStatus] = useState<'idle' | 'verified' | 'failed'>(
     user?.verified ? 'verified' : 'idle'
   );
+  const [savedPaymentMethods, setSavedPaymentMethods] = useState<SavedPaymentMethod[]>([]);
+  const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(true);
+  const [showAddCard, setShowAddCard] = useState(false);
+  const [removingMethodId, setRemovingMethodId] = useState<string | null>(null);
   const [payoutMethods, setPayoutMethods] = useState<PayoutMethod[]>([]);
   const [loadingMethods, setLoadingMethods] = useState(false);
   const [outboundPayments, setOutboundPayments] = useState<OutboundPayment[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
+  const [transactions, setTransactions] = useState<{ id: string; type: string; description: string; amount: number; date: string }[]>([]);
+  const [loadingTransactions, setLoadingTransactions] = useState(true);
 
   const fetchPayoutMethods = useCallback(async () => {
     if (!user?.recipientId) return;
@@ -115,10 +195,66 @@ export default function AccountPage() {
     }
   }, [user?.recipientId]);
 
+  const fetchSavedPaymentMethods = useCallback(async () => {
+    if (!user?.customerId) {
+      setLoadingPaymentMethods(false);
+      return;
+    }
+    setLoadingPaymentMethods(true);
+    try {
+      const res = await fetch(`/api/stripe/payment-methods?customerId=${user.customerId}`);
+      const data = await res.json();
+      setSavedPaymentMethods(data.paymentMethods || []);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingPaymentMethods(false);
+    }
+  }, [user?.customerId]);
+
+  const handleAddNewMethod = () => {
+    setShowAddCard(true);
+  };
+
+  const handleRemoveMethod = async (methodId: string) => {
+    setRemovingMethodId(methodId);
+    try {
+      await fetch('/api/stripe/detach-payment-method', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentMethodId: methodId }),
+      });
+      setSavedPaymentMethods((prev) => prev.filter((m) => m.id !== methodId));
+    } catch {
+      // ignore
+    } finally {
+      setRemovingMethodId(null);
+    }
+  };
+
+  const fetchTransactions = useCallback(async () => {
+    if (!user?.customerId) {
+      setLoadingTransactions(false);
+      return;
+    }
+    setLoadingTransactions(true);
+    try {
+      const res = await fetch(`/api/stripe/transactions?customerId=${user.customerId}`);
+      const data = await res.json();
+      setTransactions(data.transactions || []);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingTransactions(false);
+    }
+  }, [user?.customerId]);
+
   useEffect(() => {
+    fetchSavedPaymentMethods();
     fetchPayoutMethods();
     fetchOutboundPayments();
-  }, [fetchPayoutMethods, fetchOutboundPayments]);
+    fetchTransactions();
+  }, [fetchSavedPaymentMethods, fetchPayoutMethods, fetchOutboundPayments, fetchTransactions]);
 
   const handleVerifyIdentity = async () => {
     if (!user) return;
@@ -198,7 +334,7 @@ export default function AccountPage() {
           <h3 className="text-gray-400 text-xs uppercase mb-1">Verification</h3>
           {verificationStatus === 'verified' ? (
             <>
-              <p className="text-green-400 font-bold text-lg flex items-center gap-1">Verified <Check className="w-4 h-4" /></p>
+              <p className="text-green-400 font-bold text-lg flex items-center gap-1">Verified <FaCheck className="w-4 h-4" /></p>
               <p className="text-gray-400 text-xs mt-1">ID verified via Stripe Identity</p>
             </>
           ) : (
@@ -219,13 +355,98 @@ export default function AccountPage() {
         </div>
       </div>
 
+      {/* Saved Payment Methods */}
+      <div className="bg-[#0f3460] rounded-lg overflow-hidden mb-8">
+        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+          <h2 className="text-white font-bold">Payment Methods</h2>
+          {!showAddCard && (
+            <button
+              onClick={handleAddNewMethod}
+              className="text-xs text-green-400 hover:text-green-300 transition-colors flex items-center gap-1"
+            >
+              <FaPlus className="w-3 h-3" /> Add new
+            </button>
+          )}
+        </div>
+        {loadingPaymentMethods ? (
+          <div className="px-6 py-4 space-y-3">
+            {[1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="w-8 h-8 rounded" />
+                <div className="flex-1">
+                  <Skeleton className="h-4 w-32 mb-1.5" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : savedPaymentMethods.length === 0 && !showAddCard ? (
+          <div className="px-6 py-8 text-center">
+            <FaCreditCard className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+            <p className="text-gray-400 text-sm mb-3">No payment methods saved yet.</p>
+            <Button variant="secondary" size="sm" onClick={handleAddNewMethod}>
+              Add Payment Method
+            </Button>
+          </div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {savedPaymentMethods.map((method) => (
+              <div key={method.id} className="px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <PaymentMethodIcon type={method.type} brand={method.brand} />
+                  <div>
+                    <p className="text-white text-sm font-medium capitalize">
+                      {method.type === 'card' && method.brand
+                        ? `${method.brand} •••• ${method.last4}`
+                        : method.type === 'us_bank_account' || method.type === 'sepa_debit'
+                          ? `${method.bankName || 'Bank'} •••• ${method.bankLast4}`
+                          : method.email
+                            ? `${method.type} — ${method.email}`
+                            : method.type.replace(/_/g, ' ')}
+                    </p>
+                    <p className="text-gray-400 text-xs">
+                      {method.type === 'card' && method.expMonth
+                        ? `Expires ${String(method.expMonth).padStart(2, '0')}/${method.expYear}`
+                        : method.type.replace(/_/g, ' ')}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleRemoveMethod(method.id)}
+                  disabled={removingMethodId === method.id}
+                  className="text-gray-500 hover:text-red-400 transition-colors p-1.5 rounded hover:bg-red-500/10 disabled:opacity-50"
+                >
+                  {removingMethodId === method.id ? (
+                    <FaSpinner className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FaTrash className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {showAddCard && (
+          <Elements stripe={stripePromise} options={{ mode: 'setup', currency: 'gbp', setupFutureUsage: 'on_session', appearance: { theme: 'night', variables: { colorPrimary: '#22c55e', colorBackground: '#1a1a2e', colorText: '#ffffff' } } }}>
+            <AddCardForm
+              customerId={user?.customerId || ''}
+              onSuccess={() => {
+                setShowAddCard(false);
+                fetchSavedPaymentMethods();
+              }}
+              onCancel={() => setShowAddCard(false)}
+            />
+          </Elements>
+        )}
+      </div>
+
       {/* Saved Bank Accounts */}
       {user?.recipientId && (
         <div className="bg-[#0f3460] rounded-lg overflow-hidden mb-8">
           <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
             <h2 className="text-white font-bold">Withdrawal Methods</h2>
             <Link href="/account/withdraw" className="text-xs text-green-400 hover:text-green-300 transition-colors flex items-center gap-1">
-              <Plus className="w-3 h-3" /> Add new
+              <FaPlus className="w-3 h-3" /> Add new
             </Link>
           </div>
           {loadingMethods ? (
@@ -242,7 +463,7 @@ export default function AccountPage() {
             </div>
           ) : payoutMethods.length === 0 ? (
             <div className="px-6 py-8 text-center">
-              <Landmark className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+              <FaUniversity className="w-8 h-8 text-gray-600 mx-auto mb-2" />
               <p className="text-gray-400 text-sm mb-3">No bank accounts saved yet.</p>
               <Link href="/account/withdraw">
                 <Button variant="secondary" size="sm">Add Bank Account</Button>
@@ -258,7 +479,7 @@ export default function AccountPage() {
                         ? 'bg-purple-500/20 text-purple-400'
                         : 'bg-blue-500/20 text-blue-400'
                     }`}>
-                      {method.type === 'card' ? <CreditCard className="w-4 h-4" /> : <Landmark className="w-4 h-4" />}
+                      {method.type === 'card' ? <FaCreditCard className="w-4 h-4" /> : <FaUniversity className="w-4 h-4" />}
                     </div>
                     <div>
                       <p className="text-white text-sm font-semibold">
@@ -330,7 +551,7 @@ export default function AccountPage() {
             </div>
           ) : outboundPayments.length === 0 ? (
             <div className="px-6 py-8 text-center">
-              <ArrowUpRight className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+              <FaArrowUp className="w-8 h-8 text-gray-600 mx-auto mb-2" />
               <p className="text-gray-400 text-sm">No withdrawals yet.</p>
               <p className="text-gray-600 text-xs mt-1">Withdrawals will appear here once you make one.</p>
             </div>
@@ -382,7 +603,7 @@ export default function AccountPage() {
                         <div className="group relative flex items-center gap-1.5 bg-[#1a1a2e] rounded px-2.5 py-1.5">
                           <span className="text-gray-400 text-xs">Trace ID:</span>
                           <span className="text-white text-xs font-mono">{payment.traceId.value}</span>
-                          <Info className="w-3 h-3 text-gray-500" />
+                          <FaInfoCircle className="w-3 h-3 text-gray-500" />
                           <div className="absolute bottom-full left-0 mb-1.5 hidden group-hover:block w-56 bg-gray-900 border border-white/10 rounded-lg p-2 shadow-lg z-10">
                             <p className="text-xs text-gray-300">This is the reference that will appear on your bank statement for this transaction.</p>
                           </div>
@@ -392,7 +613,7 @@ export default function AccountPage() {
                         <div className="group relative flex items-center gap-1.5 bg-[#1a1a2e] rounded px-2.5 py-1.5">
                           <span className="text-gray-400 text-xs">Trace ID:</span>
                           <span className="text-yellow-400 text-xs">Pending</span>
-                          <Info className="w-3 h-3 text-gray-500" />
+                          <FaInfoCircle className="w-3 h-3 text-gray-500" />
                           <div className="absolute bottom-full left-0 mb-1.5 hidden group-hover:block w-56 bg-gray-900 border border-white/10 rounded-lg p-2 shadow-lg z-10">
                             <p className="text-xs text-gray-300">Once available, this will be the reference you see on your bank statement.</p>
                           </div>
@@ -405,7 +626,7 @@ export default function AccountPage() {
                           rel="noopener noreferrer"
                           className="flex items-center gap-1.5 text-xs text-green-400 hover:text-green-300 bg-green-500/10 hover:bg-green-500/20 rounded px-2.5 py-1.5 transition-colors"
                         >
-                          <ExternalLink className="w-3 h-3" />
+                          <FaExternalLinkAlt className="w-3 h-3" />
                           View Receipt
                         </a>
                       )}
@@ -470,44 +691,67 @@ export default function AccountPage() {
         <div className="px-6 py-4 border-b border-white/10">
           <h2 className="text-white font-bold">Transaction History</h2>
         </div>
-        <div className="divide-y divide-white/5">
-          {mockTransactions.map((txn) => (
-            <div key={txn.id} className="px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-                    txn.type === 'deposit'
-                      ? 'bg-green-500/20 text-green-400'
+        {loadingTransactions ? (
+          <div className="px-6 py-4 space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="w-8 h-8 rounded-full" />
+                <div className="flex-1">
+                  <Skeleton className="h-4 w-40 mb-1.5" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <Skeleton className="h-4 w-16" />
+              </div>
+            ))}
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="px-6 py-8 text-center">
+            <FaMinus className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+            <p className="text-gray-400 text-sm">No transactions yet.</p>
+            <p className="text-gray-600 text-xs mt-1">Deposits, bets, and winnings will appear here.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {transactions.map((txn) => (
+              <div key={txn.id} className="px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
+                      txn.type === 'deposit'
+                        ? 'bg-green-500/20 text-green-400'
+                        : txn.type === 'winning'
+                          ? 'bg-yellow-500/20 text-yellow-400'
+                          : txn.type === 'withdrawal'
+                            ? 'bg-blue-500/20 text-blue-400'
+                            : 'bg-red-500/20 text-red-400'
+                    }`}
+                  >
+                    {txn.type === 'deposit'
+                      ? <FaArrowDown className="w-4 h-4" />
                       : txn.type === 'winning'
-                        ? 'bg-yellow-500/20 text-yellow-400'
+                        ? <FaStar className="w-4 h-4" />
                         : txn.type === 'withdrawal'
-                          ? 'bg-blue-500/20 text-blue-400'
-                          : 'bg-red-500/20 text-red-400'
+                          ? <FaArrowUp className="w-4 h-4" />
+                          : <FaMinus className="w-4 h-4" />}
+                  </div>
+                  <div>
+                    <p className="text-white text-sm">{txn.description}</p>
+                    <p className="text-gray-500 text-xs">
+                      {new Date(txn.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`font-bold ${
+                    txn.amount > 0 ? 'text-green-400' : 'text-white'
                   }`}
                 >
-                  {txn.type === 'deposit'
-                    ? <ArrowDownLeft className="w-4 h-4" />
-                    : txn.type === 'winning'
-                      ? <Star className="w-4 h-4" />
-                      : txn.type === 'withdrawal'
-                        ? <ArrowUpRight className="w-4 h-4" />
-                        : <Minus className="w-4 h-4" />}
-                </div>
-                <div>
-                  <p className="text-white text-sm">{txn.description}</p>
-                  <p className="text-gray-500 text-xs">{txn.date}</p>
-                </div>
+                  {txn.amount > 0 ? '+' : ''}{currencySymbol}{Math.abs(txn.amount).toFixed(2)}
+                </span>
               </div>
-              <span
-                className={`font-bold ${
-                  txn.amount > 0 ? 'text-green-400' : 'text-white'
-                }`}
-              >
-                {txn.amount > 0 ? '+' : ''}{currencySymbol}{Math.abs(txn.amount).toFixed(2)}
-              </span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

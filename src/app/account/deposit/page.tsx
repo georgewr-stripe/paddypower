@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { stripePromise } from '@/lib/stripe-client';
 import { useBet } from '@/lib/bet-context';
 import { useSettings } from '@/lib/settings-context';
 import { Button } from '@/components/ui/Button';
-import { Check, ArrowRight, CreditCard, Loader2 } from 'lucide-react';
+import { FaCheck, FaArrowRight, FaCreditCard, FaSpinner } from 'react-icons/fa';
+import { PaymentMethodIcon } from '@/components/ui/PaymentMethodIcon';
 import {
   CheckoutElementsProvider,
   PaymentElement,
@@ -15,10 +17,14 @@ import {
 
 type SavedMethod = {
   id: string;
-  brand: string;
-  last4: string;
-  expMonth: number;
-  expYear: number;
+  type: string;
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+  bankName: string | null;
+  bankLast4: string | null;
+  email: string | null;
 };
 
 function DepositForm({ amount, currencySymbol, onSuccess }: { amount: number; currencySymbol: string; onSuccess: () => void }) {
@@ -124,15 +130,21 @@ function SavedMethodCard({
       }`}>
         {selected && <div className="w-2.5 h-2.5 rounded-full bg-green-500" />}
       </div>
-      <div className="w-8 h-8 bg-[#2a3a5e] rounded flex items-center justify-center flex-shrink-0">
-        <CreditCard className="w-4 h-4 text-gray-300" />
+      <div className="flex-shrink-0">
+        <PaymentMethodIcon type={method.type} brand={method.brand} />
       </div>
       <div className="flex-1 text-left">
         <p className="text-white text-sm font-medium capitalize">
-          {method.brand} •••• {method.last4}
+          {method.type === 'card' && method.brand
+            ? `${method.brand} •••• ${method.last4}`
+            : method.bankName
+              ? `${method.bankName} •••• ${method.bankLast4}`
+              : method.email || method.type.replace(/_/g, ' ')}
         </p>
         <p className="text-gray-400 text-xs">
-          Expires {String(method.expMonth).padStart(2, '0')}/{method.expYear}
+          {method.type === 'card' && method.expMonth
+            ? `Expires ${String(method.expMonth).padStart(2, '0')}/${method.expYear}`
+            : method.type.replace(/_/g, ' ')}
         </p>
       </div>
     </button>
@@ -140,9 +152,19 @@ function SavedMethodCard({
 }
 
 export default function DepositPage() {
+  return (
+    <Suspense>
+      <DepositPageInner />
+    </Suspense>
+  );
+}
+
+function DepositPageInner() {
   const { balance, setBalance, user, updateUser } = useBet();
   const { currencySymbol, settings } = useSettings();
-  const [amount, setAmount] = useState(20);
+  const searchParams = useSearchParams();
+  const prefillAmount = searchParams.get('amount');
+  const [amount, setAmount] = useState(prefillAmount ? Number(prefillAmount) : 20);
   const [clientSecret, setClientSecret] = useState('');
   const [showNewPayment, setShowNewPayment] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -223,9 +245,9 @@ export default function DepositPage() {
 
           <div className="bg-[#1a1a2e] rounded-lg p-4 mb-4">
             <div className="space-y-2 text-sm text-gray-300">
-              <p className="flex items-center gap-2"><Check className="w-4 h-4 text-green-400" /> Government-issued photo ID (passport, driving licence)</p>
-              <p className="flex items-center gap-2"><Check className="w-4 h-4 text-green-400" /> Live selfie for facial matching</p>
-              <p className="flex items-center gap-2"><Check className="w-4 h-4 text-green-400" /> Encrypted &amp; processed securely by Stripe</p>
+              <p className="flex items-center gap-2"><FaCheck className="w-4 h-4 text-green-400" /> Government-issued photo ID (passport, driving licence)</p>
+              <p className="flex items-center gap-2"><FaCheck className="w-4 h-4 text-green-400" /> Live selfie for facial matching</p>
+              <p className="flex items-center gap-2"><FaCheck className="w-4 h-4 text-green-400" /> Encrypted &amp; processed securely by Stripe</p>
             </div>
           </div>
 
@@ -245,7 +267,7 @@ export default function DepositPage() {
             onClick={() => updateUser({ verified: true })}
             className="w-full mt-3 text-gray-500 text-xs hover:text-gray-300 transition-colors"
           >
-            Skip for demo <ArrowRight className="w-3 h-3 inline" />
+            Skip for demo <FaArrowRight className="w-3 h-3 inline" />
           </button>
 
           <p className="text-xs text-gray-500 text-center mt-3">
@@ -316,7 +338,7 @@ export default function DepositPage() {
     return (
       <div className="max-w-lg mx-auto px-4 py-8">
         <div className="bg-[#0f3460] rounded-lg p-8 text-center">
-          <Check className="w-12 h-12 text-green-400 mx-auto mb-4" />
+          <FaCheck className="w-12 h-12 text-green-400 mx-auto mb-4" />
           <h2 className="text-white text-xl font-bold mb-2">Deposit Successful!</h2>
           <p className="text-gray-400 mb-4">
             {currencySymbol}{amount.toFixed(2)} has been added to your account.

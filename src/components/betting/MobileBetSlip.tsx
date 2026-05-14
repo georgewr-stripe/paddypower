@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useBet } from '@/lib/bet-context';
 import { BetSlip } from './BetSlip';
-import { Receipt, X } from 'lucide-react';
+import { FaReceipt, FaTimes } from 'react-icons/fa';
 
 export function MobileBetSlip() {
   const { betSlip } = useBet();
@@ -18,7 +18,7 @@ export function MobileBetSlip() {
         onClick={() => setOpen(true)}
         className="fixed bottom-6 right-6 z-50 lg:hidden w-14 h-14 bg-green-600 hover:bg-green-700 rounded-full shadow-lg shadow-green-900/40 flex items-center justify-center transition-transform hover:scale-105"
       >
-        <Receipt className="w-6 h-6 text-white" />
+        <FaReceipt className="w-6 h-6 text-white" />
         <span className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 text-black text-xs font-bold rounded-full flex items-center justify-center">
           {betSlip.length}
         </span>
@@ -40,7 +40,7 @@ export function MobileBetSlip() {
                 onClick={() => setOpen(false)}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
               >
-                <X className="w-5 h-5 text-gray-400" />
+                <FaTimes className="w-5 h-5 text-gray-400" />
               </button>
             </div>
             <BetSlip />

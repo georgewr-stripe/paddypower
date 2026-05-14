@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     metadata: {
       source: 'paddy-power-demo',
       verified: 'false',
+      winnings: '0',
     },
   });
 

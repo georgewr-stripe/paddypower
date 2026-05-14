@@ -1,6 +1,6 @@
 'use client';
 
-import { Check } from 'lucide-react';
+import { FaCheck } from 'react-icons/fa';
 
 interface StepIndicatorProps {
   steps: string[];
@@ -22,7 +22,7 @@ export function StepIndicator({ steps, currentStep }: StepIndicatorProps) {
                     : 'bg-white/5 text-gray-500'
               }`}
             >
-              {i < currentStep ? <Check className="w-3.5 h-3.5" /> : i + 1}
+              {i < currentStep ? <FaCheck className="w-3.5 h-3.5" /> : i + 1}
             </div>
             <span className={`text-xs mt-1.5 whitespace-nowrap ${
               i <= currentStep ? 'text-white' : 'text-gray-500'

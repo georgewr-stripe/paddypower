@@ -5,7 +5,7 @@ import { useBet } from '@/lib/bet-context';
 import { useSettings } from '@/lib/settings-context';
 import { Button } from '@/components/ui/Button';
 import { StepIndicator } from '@/components/ui/StepIndicator';
-import { ArrowLeft, AlertTriangle, Clock, Check, X, Loader2, Zap } from 'lucide-react';
+import { FaArrowLeft, FaExclamationTriangle, FaClock, FaCheck, FaTimes, FaSpinner, FaBolt } from 'react-icons/fa';
 
 const supportedCountries = [
   { code: 'gb', name: 'United Kingdom', flag: '🇬🇧', currency: 'gbp' },
@@ -476,7 +476,7 @@ export default function WithdrawPage() {
         <div className="bg-[#0f3460] rounded-lg p-6">
           <div className="flex items-center gap-2 mb-4">
             <button onClick={() => setStep('amount')} className="text-gray-400 hover:text-white transition-colors">
-              <ArrowLeft className="w-4 h-4" />
+              <FaArrowLeft className="w-4 h-4" />
             </button>
             <h2 className="text-white font-bold">Select Payout Method</h2>
           </div>
@@ -527,7 +527,7 @@ export default function WithdrawPage() {
                     </div>
                     {method.availablePayoutSpeeds.includes('instant') && (
                       <span className="text-xs text-yellow-300 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded flex items-center gap-1">
-                        <Zap className="w-3 h-3" /> Instant
+                        <FaBolt className="w-3 h-3" /> Instant
                       </span>
                     )}
                   </div>
@@ -603,7 +603,7 @@ export default function WithdrawPage() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <button onClick={() => setStep('amount')} className="text-gray-400 hover:text-white transition-colors">
-                <ArrowLeft className="w-4 h-4" />
+                <FaArrowLeft className="w-4 h-4" />
               </button>
               <h2 className="text-white font-bold">Bank Details ({selectedCountry.flag} {selectedCountry.name})</h2>
             </div>
@@ -634,7 +634,7 @@ export default function WithdrawPage() {
 
           {loadingSpec ? (
             <div className="text-center py-8">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-white" />
+              <FaSpinner className="w-8 h-8 animate-spin mx-auto mb-2 text-white" />
               <p className="text-gray-400 text-sm">Loading bank account fields...</p>
             </div>
           ) : bankFields.length === 0 ? (
@@ -691,14 +691,14 @@ export default function WithdrawPage() {
         <div className="bg-[#0f3460] rounded-lg p-6">
           <div className="flex items-center gap-2 mb-4">
             <button onClick={() => setStep('bank-details')} className="text-gray-400 hover:text-white transition-colors">
-              <ArrowLeft className="w-4 h-4" />
+              <FaArrowLeft className="w-4 h-4" />
             </button>
             <h2 className="text-white font-bold">Confirm Payee</h2>
           </div>
 
           <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+              <FaExclamationTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
               <div>
                 <p className="text-white font-semibold text-sm mb-1">Name check result</p>
                 {copDetails?.result === 'match' ? (
@@ -798,7 +798,7 @@ export default function WithdrawPage() {
         <div className="bg-[#0f3460] rounded-lg p-6">
           <div className="flex items-center gap-2 mb-4">
             <button onClick={() => setStep(selectedMethodId ? 'select-method' : 'bank-details')} className="text-gray-400 hover:text-white transition-colors">
-              <ArrowLeft className="w-4 h-4" />
+              <FaArrowLeft className="w-4 h-4" />
             </button>
             <h2 className="text-white font-bold">Confirm Withdrawal</h2>
           </div>
@@ -846,7 +846,7 @@ export default function WithdrawPage() {
               )}
             </div>
             <div className="bg-[#1a1a2e] rounded p-3 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-yellow-400" />
+              <FaClock className="w-4 h-4 text-yellow-400" />
               <p className="text-gray-300 text-xs">
                 Payout speed: <span className="text-white font-semibold capitalize">{selectedSpeed}</span>
                 {' · '}
@@ -873,7 +873,7 @@ export default function WithdrawPage() {
       {/* Step: Processing */}
       {step === 'processing' && (
         <div className="bg-[#0f3460] rounded-lg p-8 text-center">
-          <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-white" />
+          <FaSpinner className="w-12 h-12 animate-spin mx-auto mb-4 text-white" />
           <p className="text-white font-semibold">Processing withdrawal...</p>
           <p className="text-gray-400 text-sm mt-2">Creating payout method and sending payment via Stripe Global Payouts</p>
         </div>
@@ -882,7 +882,7 @@ export default function WithdrawPage() {
       {/* Step: Success */}
       {step === 'success' && (
         <div className="bg-[#0f3460] rounded-lg p-8 text-center">
-          <Check className="w-12 h-12 text-green-400 mx-auto mb-4" />
+          <FaCheck className="w-12 h-12 text-green-400 mx-auto mb-4" />
           <h2 className="text-white text-xl font-bold mb-2">Withdrawal Sent!</h2>
           <p className="text-gray-400 mb-2">
             {currencySymbol}{amount.toFixed(2)} is on its way to your bank account.
@@ -911,7 +911,7 @@ export default function WithdrawPage() {
       {/* Step: Failed */}
       {step === 'failed' && (
         <div className="bg-[#0f3460] rounded-lg p-8 text-center">
-          <X className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <FaTimes className="w-12 h-12 text-red-400 mx-auto mb-4" />
           <h2 className="text-white text-xl font-bold mb-2">Withdrawal Failed</h2>
           <p className="text-gray-400 mb-4">{error}</p>
           <Button

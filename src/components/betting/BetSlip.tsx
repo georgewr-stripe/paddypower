@@ -5,12 +5,17 @@ import { useSettings } from '@/lib/settings-context';
 import { formatOdds } from '@/lib/mock-data';
 import { Button } from '@/components/ui/Button';
 import { useState, useEffect } from 'react';
-import { Check, CreditCard, Loader2, Plus } from 'lucide-react';
+import { FaCheck, FaCreditCard, FaSpinner, FaPlus } from 'react-icons/fa';
+import { PaymentMethodIcon } from '@/components/ui/PaymentMethodIcon';
 
 type SavedMethod = {
   id: string;
-  brand: string;
-  last4: string;
+  type: string;
+  brand: string | null;
+  last4: string | null;
+  bankName: string | null;
+  bankLast4: string | null;
+  email: string | null;
 };
 
 function QuickTopUp() {
@@ -84,7 +89,7 @@ function QuickTopUp() {
           href="/account/deposit"
           className="flex items-center gap-2 text-green-400 text-sm hover:text-green-300 transition-colors"
         >
-          <Plus className="w-4 h-4" />
+          <FaPlus className="w-4 h-4" />
           Add a payment method
         </a>
       </div>
@@ -95,7 +100,7 @@ function QuickTopUp() {
     return (
       <div className="bg-[#1a1a2e] border border-white/10 rounded-lg p-4 mt-3">
         <div className="flex items-center gap-2 text-green-400 text-sm">
-          <Check className="w-4 h-4" />
+          <FaCheck className="w-4 h-4" />
           <span className="font-medium">{currencySymbol}{selectedAmount?.toFixed(2)} added!</span>
         </div>
       </div>
@@ -107,8 +112,14 @@ function QuickTopUp() {
       <div className="flex items-center justify-between mb-3">
         <p className="text-gray-400 text-xs uppercase tracking-wide font-medium">Quick Top Up</p>
         <div className="flex items-center gap-1.5 text-gray-500 text-xs">
-          <CreditCard className="w-3 h-3" />
-          <span className="capitalize">{defaultMethod.brand} •••• {defaultMethod.last4}</span>
+          <PaymentMethodIcon type={defaultMethod.type} brand={defaultMethod.brand} className="w-5 h-5" />
+          <span className="capitalize">
+            {defaultMethod.type === 'card' && defaultMethod.brand
+              ? `${defaultMethod.brand} •••• ${defaultMethod.last4}`
+              : defaultMethod.bankName
+                ? `${defaultMethod.bankName} •••• ${defaultMethod.bankLast4}`
+                : defaultMethod.email || defaultMethod.type.replace(/_/g, ' ')}
+          </span>
         </div>
       </div>
 
@@ -136,7 +147,7 @@ function QuickTopUp() {
         className="w-full bg-green-600 hover:bg-green-500 disabled:bg-green-600/50 disabled:cursor-not-allowed text-white text-sm font-bold py-2 rounded transition-colors flex items-center justify-center gap-2"
       >
         {charging ? (
-          <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
+          <><FaSpinner className="w-4 h-4 animate-spin" /> Processing...</>
         ) : selectedAmount ? (
           `Deposit ${currencySymbol}${selectedAmount}`
         ) : (
@@ -155,10 +166,11 @@ function QuickTopUp() {
 }
 
 export function BetSlip() {
-  const { betSlip, removeBet, clearSlip, stake, setStake, balance, setBalance, isLoggedIn, setShowLoginModal } = useBet();
+  const { betSlip, removeBet, clearSlip, stake, setStake, balance, setBalance, isLoggedIn, setShowLoginModal, user } = useBet();
   const { currencySymbol, currencyCode } = useSettings();
   const [placingBet, setPlacingBet] = useState(false);
   const [betPlaced, setBetPlaced] = useState(false);
+  const [lastWin, setLastWin] = useState(0);
 
   const totalOdds = betSlip.reduce((acc, bet) => acc * bet.odds, 1);
   const potentialReturn = stake * totalOdds;
@@ -172,11 +184,13 @@ export function BetSlip() {
 
     setPlacingBet(true);
     try {
-      const res = await fetch('/api/stripe/create-payment-intent', {
+      const res = await fetch('/api/stripe/place-bet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: Math.round(stake * 100),
+          customerId: user?.customerId,
+          stake: Math.round(stake * 100),
+          odds: totalOdds,
           description: betSlip.length === 1
             ? `Bet: ${betSlip[0].eventName} - ${betSlip[0].selection}`
             : `Acca: ${betSlip.length}-fold`,
@@ -184,12 +198,15 @@ export function BetSlip() {
       });
 
       if (res.ok) {
-        setBalance(balance - stake);
+        const data = await res.json();
+        setLastWin(data.winningsAmount);
+        setBalance(balance - stake + data.winningsAmount);
         setBetPlaced(true);
         setTimeout(() => {
           clearSlip();
           setBetPlaced(false);
-        }, 2000);
+          setLastWin(0);
+        }, 3000);
       }
     } finally {
       setPlacingBet(false);
@@ -213,9 +230,12 @@ export function BetSlip() {
         <div className="p-4">
           {betPlaced ? (
             <div className="text-center py-6">
-              <Check className="w-8 h-8 text-green-400 mx-auto mb-2" />
-              <p className="text-green-400 font-bold">Bet Placed!</p>
-              <p className="text-gray-400 text-sm mt-1">Good luck!</p>
+              <FaCheck className="w-8 h-8 text-green-400 mx-auto mb-2" />
+              <p className="text-green-400 font-bold text-lg">Winner! 🎉</p>
+              <p className="text-white text-sm mt-1 font-semibold">
+                +{currencySymbol}{lastWin.toFixed(2)}
+              </p>
+              <p className="text-gray-400 text-xs mt-1">Winnings added to your balance</p>
             </div>
           ) : betSlip.length === 0 ? (
             <p className="text-gray-400 text-sm text-center py-6">
@@ -292,21 +312,36 @@ export function BetSlip() {
                 </span>
               </div>
 
-              <Button
-                variant="secondary"
-                fullWidth
-                size="lg"
-                disabled={stake <= 0 || stake > balance || placingBet}
-                onClick={handlePlaceBet}
-              >
-                {placingBet
-                  ? 'Placing...'
-                  : !isLoggedIn
-                    ? 'Log in to Place Bet'
-                    : stake > balance
-                      ? 'Insufficient Balance'
+              {isLoggedIn && stake > 0 && stake > balance && (
+                <div className="mb-3 bg-red-500/10 border border-red-500/30 rounded p-3">
+                  <p className="text-red-400 text-xs font-medium">
+                    Insufficient balance. You need {currencySymbol}{(stake - balance).toFixed(2)} more to place this bet.
+                  </p>
+                </div>
+              )}
+
+              {isLoggedIn && stake > 0 && stake > balance ? (
+                <a
+                  href={`/account/deposit?amount=${Math.ceil(stake - balance)}`}
+                  className="block w-full text-center bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-lg text-sm transition-colors"
+                >
+                  Deposit {currencySymbol}{Math.ceil(stake - balance).toFixed(2)}
+                </a>
+              ) : (
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  size="lg"
+                  disabled={stake <= 0 || placingBet}
+                  onClick={handlePlaceBet}
+                >
+                  {placingBet
+                    ? 'Placing...'
+                    : !isLoggedIn
+                      ? 'Log in to Place Bet'
                       : `Place Bet - ${currencySymbol}${stake.toFixed(2)}`}
-              </Button>
+                </Button>
+              )}
 
               {isLoggedIn && (
                 <p className="text-xs text-gray-500 text-center mt-2">

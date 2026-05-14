@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { StepIndicator } from '@/components/ui/StepIndicator';
 import { Elements, AddressElement, useElements } from '@stripe/react-stripe-js';
 import type { StripeAddressElementChangeEvent } from '@stripe/stripe-js';
-import { Check, Loader2 } from 'lucide-react';
+import { FaCheck, FaSpinner } from 'react-icons/fa';
+import { getRandomCharacter } from '@/lib/demo-characters';
 
 type Step = 'details' | 'creating' | 'identity' | 'complete';
 
@@ -26,22 +27,6 @@ interface PersonalDetails {
     country: string;
   } | null;
 }
-
-const TEST_PREFILL: PersonalDetails = {
-  firstName: 'Jenny',
-  lastName: 'Rosen',
-  email: 'jenny.rosen@example.com',
-  phone: '+447911123456',
-  dob: '1990-01-15',
-  address: {
-    line1: '27 Fredrick Ave',
-    line2: null,
-    city: 'London',
-    state: '',
-    postal_code: 'SW1A 1AA',
-    country: 'GB',
-  },
-};
 
 function PersonalDetailsForm({
   onSubmit,
@@ -76,7 +61,7 @@ function PersonalDetailsForm({
   }, []);
 
   const handlePrefill = () => {
-    setForm(TEST_PREFILL);
+    setForm(getRandomCharacter());
     setPrefilled(true);
     setAddressComplete(true);
     setAddressKey((k) => k + 1);
@@ -192,9 +177,9 @@ function PersonalDetailsForm({
       <button
         type="button"
         onClick={handlePrefill}
-        className="w-full text-xs bg-purple-600/20 text-purple-300 border border-purple-500/30 px-3 py-2 rounded hover:bg-purple-600/30 transition-colors"
+        className="w-full text-xs bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 px-3 py-2 rounded hover:bg-yellow-500/30 transition-colors"
       >
-        Pre-fill with test data (Jenny Rosen)
+        Autofill
       </button>
     </form>
   );
@@ -390,7 +375,7 @@ export default function WizardOnboardingPage() {
       {/* Step: Creating Account */}
       {step === 'creating' && (
         <div className="bg-[#0f3460] rounded-lg p-8 text-center">
-          <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-white" />
+          <FaSpinner className="w-12 h-12 animate-spin mx-auto mb-4 text-white" />
           <p className="text-white font-semibold">Setting up your account...</p>
           <p className="text-gray-400 text-sm mt-2">This only takes a moment.</p>
         </div>
@@ -400,7 +385,7 @@ export default function WizardOnboardingPage() {
       {step === 'identity' && (
         <div className="bg-[#0f3460] rounded-lg p-6">
           <div className="text-center mb-6">
-            <Check className="w-8 h-8 text-green-400 mx-auto mb-2" />
+            <FaCheck className="w-8 h-8 text-green-400 mx-auto mb-2" />
             <p className="text-white font-semibold">Account created successfully</p>
           </div>
 
@@ -412,9 +397,9 @@ export default function WizardOnboardingPage() {
 
             <div className="bg-[#1a1a2e] rounded-lg p-4 mb-6">
               <div className="space-y-2 text-sm text-gray-300">
-                <p className="flex items-center gap-2"><Check className="w-4 h-4 text-green-400" /> Government-issued photo ID (passport, driving licence)</p>
-                <p className="flex items-center gap-2"><Check className="w-4 h-4 text-green-400" /> Live selfie for facial matching</p>
-                <p className="flex items-center gap-2"><Check className="w-4 h-4 text-green-400" /> Takes less than 2 minutes</p>
+                <p className="flex items-center gap-2"><FaCheck className="w-4 h-4 text-green-400" /> Government-issued photo ID (passport, driving licence)</p>
+                <p className="flex items-center gap-2"><FaCheck className="w-4 h-4 text-green-400" /> Live selfie for facial matching</p>
+                <p className="flex items-center gap-2"><FaCheck className="w-4 h-4 text-green-400" /> Takes less than 2 minutes</p>
               </div>
             </div>
 
@@ -447,7 +432,7 @@ export default function WizardOnboardingPage() {
       {/* Step: Complete */}
       {step === 'complete' && (
         <div className="bg-[#0f3460] rounded-lg p-8 text-center">
-          <Check className="w-12 h-12 text-green-400 mx-auto mb-4" />
+          <FaCheck className="w-12 h-12 text-green-400 mx-auto mb-4" />
           <h2 className="text-white text-xl font-bold mb-2">You&apos;re all set!</h2>
           <p className="text-gray-400 mb-6">
             Your account is ready. Make a deposit to start betting.

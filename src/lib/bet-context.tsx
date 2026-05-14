@@ -35,7 +35,7 @@ const BetContext = createContext<BetContextType | undefined>(undefined);
 export function BetProvider({ children }: { children: ReactNode }) {
   const [betSlip, setBetSlip] = useState<BetSlipItem[]>([]);
   const [stake, setStake] = useState(0);
-  const [balance, setBalance] = useState(129.0);
+  const [balance, setBalance] = useState(0);
   const [user, setUser] = useState<User | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
 
@@ -49,6 +49,17 @@ export function BetProvider({ children }: { children: ReactNode }) {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (user?.customerId) {
+      fetch(`/api/stripe/balance?customerId=${user.customerId}`)
+        .then((res) => res.json())
+        .then((data) => setBalance(data.balance))
+        .catch(() => {});
+    } else {
+      setBalance(0);
+    }
+  }, [user?.customerId]);
 
   const updateUser = (updates: Partial<User>) => {
     setUser((prev) => {
@@ -85,6 +96,11 @@ export function BetProvider({ children }: { children: ReactNode }) {
     setUser(newUser);
     localStorage.setItem('pp-demo-user', JSON.stringify(newUser));
     setShowLoginModal(false);
+
+    fetch(`/api/stripe/balance?customerId=${data.id}`)
+      .then((res) => res.json())
+      .then((balData) => setBalance(balData.balance))
+      .catch(() => {});
   };
 
   const logout = () => {

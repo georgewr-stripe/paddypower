@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock } from 'lucide-react';
+import { FaLock } from 'react-icons/fa';
 
 export default function LoginPage() {
   const [password, setPassword] = useState('');
@@ -40,7 +40,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-600/20 mb-4">
-            <Lock className="w-8 h-8 text-green-400" />
+            <FaLock className="w-8 h-8 text-green-400" />
           </div>
           <h1 className="text-2xl font-bold text-white">Paddy Power Demo</h1>
           <p className="text-gray-400 text-sm mt-1">Enter the password to access this demo</p>
