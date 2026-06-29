@@ -8,6 +8,7 @@ import { useSettings } from '@/lib/settings-context';
 import { Button } from '@/components/ui/Button';
 import { FaCheck, FaArrowRight, FaCreditCard, FaSpinner } from 'react-icons/fa';
 import { PaymentMethodIcon } from '@/components/ui/PaymentMethodIcon';
+import type { StripeExpressCheckoutElementConfirmEvent } from '@stripe/stripe-js';
 import {
   CheckoutElementsProvider,
   PaymentElement,
@@ -57,8 +58,8 @@ function DepositForm({ amount, currencySymbol, onSuccess }: { amount: number; cu
     }
   };
 
-  const handleExpressCheckout = async () => {
-    const result = await checkout.confirm();
+  const handleExpressCheckout = async (event: StripeExpressCheckoutElementConfirmEvent) => {
+    const result = await checkout.confirm({ expressCheckoutConfirmEvent: event });
     if (result.type === 'error') {
       setError(result.error.message || 'Payment failed');
     } else {
