@@ -32,6 +32,28 @@ function DepositForm({ amount, currencySymbol, onSuccess }: { amount: number; cu
   const checkoutState = useCheckoutElements();
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+  const checkout = checkoutState.type === 'success' ? checkoutState.checkout : null;
+
+  useEffect(() => {
+    if (!checkout) return;
+    const expressCheckoutElement = checkout.getExpressCheckoutElement();
+    if (!expressCheckoutElement) return;
+
+    const handleConfirm = async (event: StripeExpressCheckoutElementConfirmEvent) => {
+      const result = await checkout.confirm({ expressCheckoutConfirmEvent: event });
+      if (result.type === 'error') {
+        event.paymentFailed({ reason: 'fail' });
+        setError(result.error.message || 'Payment failed');
+      } else {
+        onSuccess();
+      }
+    };
+
+    expressCheckoutElement.on('confirm', handleConfirm);
+    return () => {
+      expressCheckoutElement.off('confirm', handleConfirm);
+    };
+  }, [checkout, onSuccess]);
 
   if (checkoutState.type === 'loading') {
     return <div className="text-center text-gray-400 py-8">Loading payment form...</div>;
@@ -41,14 +63,12 @@ function DepositForm({ amount, currencySymbol, onSuccess }: { amount: number; cu
     return <div className="text-center text-red-400 py-8">{checkoutState.error.message}</div>;
   }
 
-  const { checkout } = checkoutState;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setProcessing(true);
     setError('');
 
-    const result = await checkout.confirm();
+    const result = await checkout!.confirm();
 
     if (result.type === 'error') {
       setError(result.error.message || 'Payment failed');
@@ -58,19 +78,10 @@ function DepositForm({ amount, currencySymbol, onSuccess }: { amount: number; cu
     }
   };
 
-  const handleExpressCheckout = async (event: StripeExpressCheckoutElementConfirmEvent) => {
-    const result = await checkout.confirm({ expressCheckoutConfirmEvent: event });
-    if (result.type === 'error') {
-      setError(result.error.message || 'Payment failed');
-    } else {
-      onSuccess();
-    }
-  };
-
   return (
     <form onSubmit={handleSubmit}>
       <div className="mb-4">
-        <ExpressCheckoutElement onConfirm={handleExpressCheckout} />
+        <ExpressCheckoutElement />
       </div>
 
       <div className="flex items-center gap-3 mb-4">
